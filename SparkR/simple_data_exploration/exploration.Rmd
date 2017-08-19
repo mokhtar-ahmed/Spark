@@ -1,0 +1,144 @@
+---
+title: "Data Exploration Using R and Spark"
+output: html_notebook
+---
+
+#### I gonna use R and Spark for a sample data exploration task to explore the R capabilites for using spark distributed data processing
+
+**Setup** 
+
+There is almost no installations needed for this tutorial but here is the requried tools for running this script in your machine.
+
+- Java and i assumed it was already installed on your machine and why java and the answer is very simple ( SPARK written in Scala which is a JMV **Java Virtual Machine** language ) you can download java from [here](https://java.com/en/download/) and this link will help you 
+
+- Spark lastest version 2.2 binaries and you can download it from [here](https://spark.apache.org/downloads.html) and follow the setup instruction if you don't no worries i will do this step for you ;) 
+
+- R version 3 
+
+- R Studio to write this notebook 
+
+- ggplot2 for graphs
+```{r, echo=TRUE,tidy=TRUE,results='hide'}
+#checking if the Spark Home is declared as an enviroment variable by checking the existence of the SPARK_HOME Path variable and if not exist don't worry i will do it for you
+
+if (nchar(Sys.getenv("SPARK_HOME")) < 1) {
+   
+      # download.file(url = "https://d3kbcqa49mib13.cloudfront.net/spark-2.2.0-bin-hadoop2.7.tgz",
+      #         destfile = "spark-2.2.0-bin-hadoop2.7.tgz")
+      #untar("spark-2.2.0-bin-hadoop2.7.tgz")
+      Sys.setenv(SPARK_HOME = paste0(getwd(), "/spark-2.2.0-bin-hadoop2.7"))
+}
+```
+<br/>
+
+**- SparkR is an R package that provides a light-weight frontend to use Apache Spark from R. In Spark 2.2.0, SparkR provides a distributed data frame implementation that supports operations like selection, filtering, aggregation etc. (similar to R data frames, dplyr) but on large datasets. SparkR also supports distributed machine learning using MLlib.**
+
+**- The entry point into SparkR is the SparkSession which connects your R program to a Spark cluster. You can create a SparkSession using sparkR.session and pass in options such as the application name, any spark packages depended on.**
+
+```{r, echo=TRUE,tidy=TRUE,results='hide'}
+
+library(ggplot2)
+library(dplyr)
+
+## importing the SparkR library 
+library(SparkR, lib.loc = c(normalizePath(file.path(Sys.getenv("SPARK_HOME"), "R", "lib"))))
+
+## create 
+sparkR.session(master = "local[*]", sparkConfig = list(spark.driver.memory = "2g"))
+```
+
+###Creating SparkDataFrames
+
+With a SparkSession, applications can create SparkDataFrames from 
+
+- Local R data frame for example **"df <- as.DataFrame(faithful)"**.
+
+- Hive table  for example **"results <- sql('FROM src SELECT key, value')"**.
+
+- Other data sources and that is our case reading data from CSV file.
+
+The following dataset represent the flights in 2015 for x airlines so my first step is to read the dataset
+i will depend on my analysis on Q/A style by asking some questions and trying to answer them by a simple graph
+```{r}
+csvPath <- "data/flight-data/csv/2015-summary.csv"
+df <- read.df(csvPath, "csv", header = "true", inferSchema = "true", na.strings = "NA")
+head(df)
+```
+
+**What is the top 10 country that people like to travel most?**
+```{r, echo=TRUE}
+new_df <- summarize(groupBy(df, df$DEST_COUNTRY_NAME), count = sum(df$count))
+head(new_df)
+
+plot_df <- as.data.frame(new_df) %>% dplyr::arrange(desc(count))
+View(plot_df)
+plot_df$DEST_COUNTRY_NAME <- factor(plot_df$DEST_COUNTRY_NAME)
+
+p <- ggplot(plot_df[1:10,], aes(DEST_COUNTRY_NAME, count))
+p + geom_point(aes(colour = DEST_COUNTRY_NAME, size = count))
+
+```
+
+**What is the top 10 country that people hate to travel most?**
+```{r, echo=TRUE}
+plot_df$DEST_COUNTRY_NAME <- factor(plot_df$DEST_COUNTRY_NAME)
+n <- nrow(plot_df)
+p <- ggplot(plot_df[(n-10):n,], aes(DEST_COUNTRY_NAME, count))
+p + geom_point(aes(colour = DEST_COUNTRY_NAME, size = count))
+```
+
+
+**What is the top 10 country that people like to leave most?**
+```{r, echo=TRUE}
+new_df <- summarize(groupBy(df, df$ORIGIN_COUNTRY_NAME), count = sum(df$count))
+head(new_df)
+
+plot_df <- as.data.frame(new_df) %>% dplyr::arrange(desc(count))
+View(plot_df)
+plot_df$ORIGIN_COUNTRY_NAME <- factor(plot_df$ORIGIN_COUNTRY_NAME)
+
+p <- ggplot(plot_df[1:10,], aes(ORIGIN_COUNTRY_NAME, count))
+p + geom_point(aes(colour = ORIGIN_COUNTRY_NAME, size = count))
+
+```
+
+**What is the top 10 country that people hate to leave most?**
+```{r, echo=TRUE}
+plot_df$ORIGIN_COUNTRY_NAME <- factor(plot_df$ORIGIN_COUNTRY_NAME)
+n <- nrow(plot_df)
+p <- ggplot(plot_df[(n-10):n,], aes(ORIGIN_COUNTRY_NAME, count))
+p + geom_point(aes(colour = ORIGIN_COUNTRY_NAME, size = count))
+```
+
+
+**What is the top 10 country that people like to travel to U.S ?**
+```{r, echo=TRUE}
+
+usa_flights_rdd <- filter(df, df$DEST_COUNTRY_NAME == "United States")
+
+new_df <- summarize(groupBy(usa_flights_rdd, df$ORIGIN_COUNTRY_NAME), count = sum(df$count))
+head(new_df)
+
+plot_df <- as.data.frame(new_df) %>% dplyr::arrange(desc(count))
+View(plot_df)
+plot_df$ORIGIN_COUNTRY_NAME <- factor(plot_df$ORIGIN_COUNTRY_NAME)
+
+p <- ggplot(plot_df[1:10,], aes(ORIGIN_COUNTRY_NAME, count))
+p + geom_point(aes(colour = ORIGIN_COUNTRY_NAME, size = count))
+
+```
+
+**What is the top 10 country that people hate to travel to U.S ?**
+```{r, echo=TRUE}
+plot_df$ORIGIN_COUNTRY_NAME <- factor(plot_df$ORIGIN_COUNTRY_NAME)
+n <- nrow(plot_df)
+p <- ggplot(plot_df[(n-10):n,], aes(ORIGIN_COUNTRY_NAME, count))
+p + geom_point(aes(colour = ORIGIN_COUNTRY_NAME, size = count))
+```
+
+
+
+### References 
+
+- [SparkR Tutorials](https://spark.apache.org/docs/latest/sparkr.html)
+
